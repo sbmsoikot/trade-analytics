@@ -99,3 +99,4 @@ echo "   - Update your website's REACT_APP_ANALYTICS_URL to point to this URL"
 echo ""
 
 echo -e "${GREEN}✅ Deployment script completed successfully!${NC}"
+
