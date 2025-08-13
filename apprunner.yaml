@@ -1,0 +1,16 @@
+version: 1.0
+runtime: python3
+build:
+  commands:
+    build:
+      - echo "Building analytics app..."
+      - pip install -r requirements.txt
+run:
+  runtime-version: 3.11
+  command: gunicorn --bind 0.0.0.0:8050 app:server
+  network:
+    port: 8050
+    env: PORT
+  env:
+    - name: PORT
+      value: "8050"
