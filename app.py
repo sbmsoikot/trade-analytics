@@ -1,3 +1,4 @@
+
 import math
 import pandas as pd
 import plotly.graph_objects as go
@@ -97,39 +98,139 @@ def build_figure(sort_metric="deficit", show_lines=("deficit","exports","imports
 
     # For each metric selected, add one trace per country so hover shows value+country
     color_map = {"deficit":"#d62728", "exports":"#2ca02c", "imports":"#1f77b4"}
-    
-    for metric in show_lines:
-        for _, row in df.iterrows():
-            country = row["Country"]
-            value = row[metric]
-            if value is not None and country in positions:
-                tx, ty = positions[country]
-                # Scale line length by value relative to max for this metric
-                if max_vals[metric] > 0:
-                    tx *= abs(value) / max_vals[metric]
-                    ty *= abs(value) / max_vals[metric]
-                traces.append(line_trace_for_country(metric, color_map[metric], f"{country}: {value:,.0f}", tx, ty, value))
-
-    # Country name labels
-    name_traces = []
-    annotations = []
-    for _, row in df.iterrows():
-        country = row["Country"]
-        if country in positions:
-            x, y = positions[country]
-            name_traces.append(go.Scatter(
-                x=[x], y=[y], mode="markers+text",
-                text=[country], textposition="middle center",
-                marker=dict(size=8, symbol="circle", line=dict(width=1, color="white"), color="lightgray"),
-                hoverinfo="text", hovertext=[country],
+    for metric in ["deficit","exports","imports"]:
+        if metric not in show_lines:
+            continue
+        for i, row in df.iterrows():
+            tx, ty = positions[row["Country"]]
+            dist = (tx**2 + ty**2)**0.5 or 1.0
+            # unit direction
+            ux, uy = tx/dist, ty/dist
+            val = row[metric]
+            if pd.isna(val) or max_vals[metric] in (0, None) or pd.isna(max_vals[metric]):
+                L = 0.0
+            else:
+                L = dist * (abs(val)/max_vals[metric])
+            xs = [0, ux*L]; ys = [0, uy*L]
+            hover = f"{row['Country']} — {metric.title()}: ${val:,.1f}K"
+            traces.append(go.Scatter(
+                x=xs, y=ys, mode="lines",
+                line=dict(width=3, color=color_map[metric]),
+                opacity=0.5,
+                hoverinfo="text", hovertext=hover,
+                name=metric.title(), showlegend=False
+            ))
+            
+            # Add small ball at the end of each line
+            traces.append(go.Scatter(
+                x=[xs[1]], y=[ys[1]], mode="markers",
+                marker=dict(size=4, color=color_map[metric], symbol="circle"),
+                hoverinfo="skip",
                 showlegend=False
             ))
-            # Add text annotation for better positioning
+
+    # Labels: country names with tariff percentages
+    xs = [positions[r["Country"]][0] for _, r in df.iterrows()]
+    ys = [positions[r["Country"]][1] for _, r in df.iterrows()]
+    names = [r["Country"] for _, r in df.iterrows()]
+    tariffs = [r["tariff_pct"] if not pd.isna(r["tariff_pct"]) else None for _, r in df.iterrows()]
+    
+    # Create consistent country positions that don't change when lines are toggled
+    country_positions = [(r["Country"], positions[r["Country"]], text_angles[i]) for i, (_, r) in enumerate(df.iterrows())]
+    
+    # Combine country names with tariff percentages
+    combined_labels = []
+    for i, (name, tariff, angle) in enumerate(zip(names, tariffs, text_angles)):
+        if tariff is not None:
+            # For left side labels (angle == -90), put tariff first
+            if angle == -90:
+                combined_labels.append(f"({int(tariff)}%) {name}")
+            else:
+                combined_labels.append(f"{name} ({int(tariff)}%)")
+        else:
+            combined_labels.append(name)
+    
+    # Create text traces with proper rotation
+    name_traces = []
+    annotations = []
+    
+    for i, (country, (x, y), angle) in enumerate(country_positions):
+        # Get the label for this country
+        row = df.iloc[i]
+        name = row["Country"]
+        tariff = row["tariff_pct"] if not pd.isna(row["tariff_pct"]) else None
+        
+        # Create the label
+        if tariff is not None:
+            if angle == -90:  # left side
+                label = f"({int(tariff)}%) {name}"
+            else:
+                label = f"{name} ({int(tariff)}%)"
+        else:
+            label = name
+        # Create hover text with all values for this country
+        row = df.iloc[i]
+        deficit_val = row["deficit"] if not pd.isna(row["deficit"]) else 0
+        exports_val = row["exports"] if not pd.isna(row["exports"]) else 0
+        imports_val = row["imports"] if not pd.isna(row["imports"]) else 0
+        tariff_val = row["tariff_pct"] if not pd.isna(row["tariff_pct"]) else 0
+        
+        hover_text = f"{row['Country']}<br>"
+        hover_text += f"Deficit: ${deficit_val:,.1f}K<br>"
+        hover_text += f"Exports: ${exports_val:,.1f}K<br>"
+        hover_text += f"Imports: ${imports_val:,.1f}K<br>"
+        hover_text += f"Adjusted Tariff: {tariff_val:.0f}%"
+        # Color based on tariff percentage
+        if tariffs[i] is not None:
+            if tariffs[i] >= 35:
+                color = "#ff4444"  # bright red for high tariffs
+            elif tariffs[i] >= 25:
+                color = "#ff8800"  # orange for medium tariffs
+            elif tariffs[i] >= 15:
+                color = "#9370DB"  # purple for medium tariffs
+            else:
+                color = "#44aa44"  # green for low tariffs
+        else:
+            color = "#111111"
+        
+        # Handle text positioning and rotation based on position
+        if abs(angle) == 90:  # left or right side
+            # Left side: left aligned, Right side: right aligned
+            textposition = "middle right" if angle == -90 else "middle left"
+            name_traces.append(go.Scatter(
+                x=[x], y=[y], mode="text",
+                text=[label],
+                textposition=textposition,
+                textfont=dict(size=12, color=color),  # increased font size
+                hoverinfo="text",
+                hovertext=[hover_text],
+                showlegend=False,
+            ))
+        else:  # top or bottom side - use annotations for rotation
+            # Calculate rotation angle for top/bottom labels
+            rotation_angle = 0 if abs(y) < 0.1 else (90 if y > 0 else -90)
+            
+            # Adjust position to avoid overlap - reduce spacing for top/bottom
+            if abs(x) > 8:  # extreme left/right positions
+                offset_x = 0.4 if x > 0 else -0.4  # reduced from 0.8
+                offset_y = 0.2 if y > 0 else -0.2  # reduced from 0.3
+            else:  # middle positions
+                offset_x = 0.1  # reduced from 0.2
+                offset_y = 0.3 if y > 0 else -0.3  # reduced from 0.6
+            
+            # Set proper alignment: top labels bottom-aligned, bottom labels top-aligned
+            yanchor = "bottom" if y > 0 else "top"
+            
             annotations.append(dict(
-                x=x, y=y, text=country,
-                showarrow=False, xanchor="center", yanchor="middle",
-                font=dict(size=10, color="black"),
-                bgcolor="rgba(255,255,255,0.8)", bordercolor="black", borderwidth=1
+                x=x + offset_x,
+                y=y + offset_y,
+                text=label,
+                showarrow=False,
+                font=dict(size=12, color=color),  # increased font size to match left/right
+                textangle=rotation_angle,
+                xanchor="center",
+                yanchor=yanchor,
+                hovertext=hover_text
             ))
 
     # USA map background image
