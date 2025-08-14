@@ -83,7 +83,7 @@ def build_figure(sort_metric="deficit", show_lines=("deficit","exports","imports
         df = df.sort_values(by=sort_metric, ascending=False)
     df = df.reset_index(drop=True)
 
-    # Rectangular layout - use consistent positioning regardless of visible lines
+    # Use consistent positioning regardless of visible lines
     pts, text_angles = perimeter_positions(len(df))
     positions = {row["Country"]: pts[i] for i, (_, row) in enumerate(df.iterrows())}
 
@@ -268,8 +268,8 @@ def build_figure(sort_metric="deficit", show_lines=("deficit","exports","imports
     fig.update_layout(
         title=f"US Trade Network — Sorted by {sort_metric.title()}",
         xaxis=dict(visible=False), yaxis=dict(visible=False),
-        margin=dict(l=20,r=20,t=20,b=20),  # increased left/right margins for better spacing
-        legend=dict(orientation="h", x=0.3, y=1.05),
+        margin=dict(l=20,r=20,t=60,b=20),  # increased top margin to make room for legend
+        legend=dict(orientation="h", x=0.55, y=1.05),
         width=1200, height=1200,
         annotations=annotations,
         images=[us_map],  # add the USA map background
@@ -299,8 +299,8 @@ def build_figure(sort_metric="deficit", show_lines=("deficit","exports","imports
 
 app = Dash(__name__)
 app.layout = html.Div([
-    html.H2("US Trade Network — Rectangular Layout"),
-    html.Div(style={"display":"flex","gap":"20px","alignItems":"center"}, children=[
+    html.H2("US Trade Network"),
+    html.Div(style={"display":"flex","gap":"20px","alignItems":"center","justifyContent":"center"}, children=[
         html.Div([html.Label("Sort by"), dcc.Dropdown(
             id="sort_metric",
             options=[{"label":"Deficit (high→low)","value":"deficit"},
